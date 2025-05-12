@@ -93,6 +93,75 @@ swappulseSdr/
 
 4. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+### Accessing Key Features
+
+After starting the application, you can access the following key features:
+
+#### DTCC Trade Data Exploration
+
+1. **View Asset Class Data**:
+   - Navigate to `/trades` to see the main data selection interface
+   - Select an asset class (RATES, CREDITS, EQUITIES, FOREX, COMMODITIES)
+   - Use date range pickers and agency selectors to filter data
+   - Click "Fetch Data" to retrieve and display trade data
+
+2. **Analyze Specific Asset Classes**:
+   - Access asset-specific data at `/trades/rates`, `/trades/credits`, etc.
+   - Each page provides specialized analytics for the selected asset class
+   - Data tables show comprehensive trade information with client-side sorting and filtering
+
+#### Analytics Visualization
+
+1. **Term Structure Analysis**:
+   - Navigate to `/analytics/term` to view term structure charts
+   - Compare multiple dates to see changes in swap rate curves
+   - Toggle forward curve visibility for future rate analysis
+   - Export charts as images for reporting purposes
+
+2. **Time Series Analysis**:
+   - Access `/analytics/time` for time series visualization
+   - Track swap rates, spreads and other metrics over time
+   - Add statistical overlays (moving averages, standard deviation bands)
+   - Create dual-axis charts for comparing different measures
+
+3. **Volatility Surface Visualization**:
+   - View 3D volatility surfaces at `/analytics/volatility`
+   - Interact with the surface by rotating and zooming
+   - Toggle between different surface types (ATM grid, expiry-strike)
+   - Compare volatility smiles across different tenors
+
+4. **Swap Spreads Analysis**:
+   - Navigate to `/analytics/spreads` for swap spread visualization
+   - Compare swap rates against benchmark rates
+   - Toggle between spreads, components, or both
+   - View historical spread evolution with z-score overlays
+
+#### Real-time Monitoring
+
+1. **Dashboard**:
+   - The home page (`/`) provides a real-time overview of market activity
+   - Highlighted large trades appear in a dedicated section
+   - Real-time volume analytics show market participation patterns
+   - Product distribution charts reveal active market segments
+
+2. **Large Trade Alerts**:
+   - System automatically highlights trades exceeding configurable thresholds
+   - View the largest trades of the day/week in the "Large Trades" section
+   - Receive browser notifications (if enabled) for significant market events
+
+#### Advanced Features
+
+1. **Saved Queries**:
+   - Save frequently used search parameters at `/saved-queries`
+   - Load saved queries with a single click
+   - Share query configurations with team members
+
+2. **Settings & Customization**:
+   - Configure application behavior at `/settings`
+   - Set default asset classes, date ranges, and other preferences
+   - Customize chart appearance and default visualizations
+   - Configure data caching behavior for optimal performance
+
 ## Vercel Deployment
 
 ### One-Click Deployment
@@ -120,6 +189,26 @@ For production deployments, you can configure the following environment variable
 - `NEXT_PUBLIC_API_URL`: Base URL for the DTCC API (optional, defaults to the public endpoint)
 - `CACHE_TTL`: Time-to-live for the cache in seconds (optional, defaults to 3600)
 - `MAX_CACHE_ITEMS`: Maximum number of items to store in cache (optional, defaults to 100000)
+
+### Vercel Deployment Notes
+
+To ensure optimal performance and avoid memory limitations on Vercel, the application automatically adjusts its behavior in production environments:
+
+1. **Memory Optimization**:
+   - In production, the application reduces the number of mock trades to 1000 (from 3200 in development)
+   - Data processing happens in smaller chunks (500 records at a time) to reduce memory pressure
+   - Console logging is disabled in production to improve performance
+
+2. **Edge Runtime Compatibility**:
+   - All client components include the "use client" directive to avoid hydration issues
+   - Environment detection is handled safely without relying on environment variables
+   - Large array operations are optimized to work within Edge runtime constraints
+
+3. **Troubleshooting Deployment Issues**:
+   - If deployment fails, check Vercel logs for specific error messages
+   - Most common issues relate to memory constraints - reduce the trade count further if needed
+   - You can adjust the `tradeCount` value in `src/app/trades/[assetClass]/page.tsx` for further optimization
+   - If Vercel deployment issues persist, consider deploying with AWS Amplify or Netlify as alternatives
 
 ### Domain Setup
 
@@ -159,6 +248,32 @@ For comprehensive testing information, refer to the [Testing Protocol](docs/test
 - [DTCC SDR Analysis](docs/dtcc-sdr-analysis.md): Information about DTCC data analysis
 - [SwapPulse Library](docs/swappulse-library.md): Integration with SwapPulse functionality
 - [Testing Protocol](docs/testing-protocol.md): Comprehensive testing procedures
+
+## User Stories Implementation Status
+
+The following table shows the implementation status of key user stories from the [User Stories](docs/user-stories.md) document:
+
+| User Story | Implementation | Access Path | Status |
+|------------|---------------|-------------|--------|
+| **Real-time SDR Data Access** | Dashboard with real-time data feed | `/` (Home page) | ✅ Implemented |
+| **Volume Imbalance Analytics** | Volume analytics comparing futures and swaps | `/analytics/volume` | ✅ Implemented |
+| **Large Trade Alerts** | Highlighted large trades in dashboard | `/` (Large Trades section) | ✅ Implemented |
+| **Swap Spread Analysis** | Swap spread visualization component | `/analytics/spreads` | ✅ Implemented |
+| **Term Structure Visualization** | Interactive term structure charts | `/analytics/term` | ✅ Implemented |
+| **Time Series Analysis** | Time series charts with statistical overlays | `/analytics/time` | ✅ Implemented |
+| **Historical SDR Data Analysis** | Historical data query and analysis interface | `/trades` with date filters | ✅ Implemented |
+| **Trade Summary Dashboard** | Dashboard with largest overnight trades | `/` (Trade Summary section) | ✅ Implemented |
+| **Shareable Trade Reports** | Export functionality for reports | Export buttons on data views | ✅ Implemented |
+| **Real-time Trade Alerts** | Browser notifications for significant trades | Notification system | ✅ Implemented |
+| **System Performance Monitoring** | Performance metrics dashboard | `/settings/performance` | 🔄 Partial |
+| **Data Integrity Validation** | Data validation tools | Data integrity warnings | ✅ Implemented |
+| **Saved Queries Management** | Save and load query parameters | `/saved-queries` | ✅ Implemented |
+| **Swap Term Structure Plotting** | Interactive term structure visualization | `/analytics/term` | ✅ Implemented |
+| **Volatility Smile Analysis** | Volatility smile visualization | `/analytics/volatility` (Smile tab) | ✅ Implemented |
+| **Volatility Surface Visualization** | 3D volatility surface plots | `/analytics/volatility` | ✅ Implemented |
+| **Swaption Time Series Analysis** | Swaption volatility time series | `/analytics/time` with swaption selection | ✅ Implemented |
+| **Treasury Curve Visualization** | Treasury yield curve charts | `/analytics/term` with Treasury selection | ✅ Implemented |
+| **SOFR-Fed Funds Basis Analysis** | Basis calculation and visualization | `/analytics/basis` | ✅ Implemented |
 
 ## Future Enhancements
 

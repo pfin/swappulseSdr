@@ -14,6 +14,68 @@ import TradeTable from '@/components/data/TradeTable';
 import AnalyticsDashboard from '@/components/analytics/AnalyticsDashboard';
 import { DTCCFetchParams, DTCCTrade, DTCCResponse, DTCCAnalytics, AssetClass } from '@/types/dtcc';
 
+// Helper function to distribute trade times realistically
+const getRealisticTradeTime = (date: Date): Date => {
+  // Distribution weighted towards market hours
+  const hour = Math.floor(Math.random() * 24);
+  const minute = Math.floor(Math.random() * 60);
+  const second = Math.floor(Math.random() * 60);
+  
+  // Weight towards market hours (8am - 6pm ET)
+  const marketHourWeight = 0.85; // 85% of trades during market hours
+  const isMarketHours = Math.random() < marketHourWeight;
+  
+  const result = new Date(date);
+  if (isMarketHours) {
+    // Market hours: 8am-6pm ET (13-23 UTC)
+    result.setUTCHours(13 + Math.floor(Math.random() * 10));
+  } else {
+    // Off hours
+    result.setUTCHours(hour);
+  }
+  
+  result.setUTCMinutes(minute);
+  result.setUTCSeconds(second);
+  
+  return result;
+};
+
+// Helper function to generate realistic product types based on asset class
+const getProductTypes = (assetClass: AssetClass): string[] => {
+  switch (assetClass) {
+    case 'RATES':
+      return ['IRS', 'OIS', 'Basis Swap', 'Fixed-Float', 'Inflation Swap', 'Cross-Currency'];
+    case 'CREDITS':
+      return ['CDS', 'CDS Index', 'TRS', 'CDX', 'iTraxx', 'Basket Default Swap'];
+    case 'EQUITIES':
+      return ['Equity Swap', 'Dividend Swap', 'Variance Swap', 'Total Return', 'Option'];
+    case 'FOREX':
+      return ['FX Forward', 'FX Swap', 'FX Option', 'NDF', 'Currency Swap'];
+    case 'COMMODITIES':
+      return ['Energy Swap', 'Metal Swap', 'Agricultural Swap', 'Commodity Option', 'Commodity Forward'];
+    default:
+      return ['Swap', 'Option', 'Forward', 'Future'];
+  }
+};
+
+// Helper to generate realistic underlyings
+const getUnderlyings = (assetClass: AssetClass): string[] => {
+  switch (assetClass) {
+    case 'RATES':
+      return ['SOFR', 'EURIBOR', 'SONIA', 'TONAR', 'LIBOR', 'EFFR', 'ESTR'];
+    case 'CREDITS':
+      return ['Investment Grade', 'High Yield', 'Emerging Markets', 'Crossover', 'Sovereign'];
+    case 'EQUITIES':
+      return ['S&P 500', 'NASDAQ', 'EURO STOXX', 'FTSE', 'Nikkei', 'Single Name', 'Sector Index'];
+    case 'FOREX':
+      return ['EUR/USD', 'USD/JPY', 'GBP/USD', 'USD/CHF', 'USD/CAD', 'EUR/GBP', 'AUD/USD'];
+    case 'COMMODITIES':
+      return ['WTI Crude', 'Brent Crude', 'Natural Gas', 'Gold', 'Silver', 'Copper', 'Wheat', 'Corn'];
+    default:
+      return ['USD', 'EUR', 'JPY', 'GBP', 'CHF'];
+  }
+};
+
 export default function AssetClassTradesPage() {
   const params = useParams();
   const assetClass = params.assetClass as string;
@@ -65,24 +127,121 @@ export default function AssetClassTradesPage() {
       // In a real implementation, we would fetch from the API
       // const response = await fetch(`/api/dtcc/historical?${queryParams.toString()}`);
       
-      // For demonstration, create mock data
-      const mockTrades: DTCCTrade[] = Array.from({ length: 50 }, (_, i) => ({
-        eventTimestamp: new Date(Date.now() - Math.random() * 86400000 * 5),
-        executionTimestamp: new Date(Date.now() - Math.random() * 86400000 * 5),
-        effectiveDate: new Date(Date.now() + Math.random() * 86400000 * 30),
-        expirationDate: new Date(Date.now() + Math.random() * 86400000 * 365),
-        notionalLeg1: `${Math.floor(1000000 + Math.random() * 50000000)}`,
-        notionalLeg2: Math.random() > 0.5 ? `${Math.floor(1000000 + Math.random() * 50000000)}` : null,
-        spreadLeg1: `${(Math.random() * 5).toFixed(4)}`,
-        spreadLeg2: Math.random() > 0.5 ? `${(Math.random() * 5).toFixed(4)}` : null,
-        strikePrice: Math.random() > 0.7 ? `${(Math.random() * 100).toFixed(2)}` : null,
-        otherPaymentAmount: Math.random() > 0.8 ? `${Math.floor(10000 + Math.random() * 100000)}` : null,
-        actionType: Math.random() > 0.5 ? 'NEW' : 'MODIFY',
-        assetClass: getAssetClass(assetClass),
-        productType: ['Swap', 'Option', 'Forward', 'Future'][Math.floor(Math.random() * 4)],
-        underlying: ['USD', 'EUR', 'JPY', 'LIBOR', 'SOFR'][Math.floor(Math.random() * 5)],
-        rawData: {}
-      }));
+      // Get appropriate product types and underlyings for the selected asset class
+      const productTypes = getProductTypes(fetchParams.assetClass);
+      const underlyings = getUnderlyings(fetchParams.assetClass);
+      
+      // For demonstration, create mock data with appropriate number of trades
+      // We'll use fewer trades in production to avoid Vercel Edge runtime memory limitations
+      // And more trades in development for better testing
+      const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+      // Use 1000 trades for production (Vercel) and 3200 for development (localhost)
+      const tradeCount = isProduction ? 1000 : 3200;
+      
+      // Only log in non-production environments
+      if (!isProduction) {
+        console.log(`Generating ${tradeCount} mock trades for ${fetchParams.assetClass}`);
+      }
+      
+      // Create trades in smaller chunks to reduce memory pressure
+      const chunkSize = 500;
+      const mockTrades: DTCCTrade[] = [];
+      
+      // Generate trades in chunks to avoid memory issues
+      for (let chunk = 0; chunk < Math.ceil(tradeCount / chunkSize); chunk++) {
+        const chunkStart = chunk * chunkSize;
+        const chunkEnd = Math.min((chunk + 1) * chunkSize, tradeCount);
+        const chunkLength = chunkEnd - chunkStart;
+        
+        // Create a chunk of trades
+        const tradesChunk = Array.from({ length: chunkLength }, (_, j) => {
+          const i = chunkStart + j; // Global index
+          
+          // Calculate date based on the requested date range
+          const daySpan = (fetchParams.endDate.getTime() - fetchParams.startDate.getTime()) / (1000 * 60 * 60 * 24);
+          const randomDayOffset = Math.random() * daySpan;
+          const tradeDate = new Date(fetchParams.startDate.getTime() + randomDayOffset * 1000 * 60 * 60 * 24);
+          
+          // Get realistic trade time distribution
+          const executionTime = getRealisticTradeTime(tradeDate);
+          
+          // Event timestamp is slightly after execution (reporting delay)
+          const reportingDelayMinutes = Math.floor(Math.random() * 60 * 4); // 0-4 hour delay
+          const eventTime = new Date(executionTime.getTime() + reportingDelayMinutes * 60 * 1000);
+          
+          // Generate realistic trade data
+          const productType = productTypes[Math.floor(Math.random() * productTypes.length)];
+          const underlying = underlyings[Math.floor(Math.random() * underlyings.length)];
+          
+          // Generate notional with realistic distribution
+          // Log-normal distribution to reflect market reality (many small trades, few large ones)
+          const notionalBase = Math.exp(Math.random() * Math.log(100_000_000));
+          const notionalLeg1 = Math.max(100_000, Math.floor(notionalBase));
+          
+          // Only some trades have a second leg
+          const hasSecondLeg = productType.includes('Swap') || productType.includes('Cross-Currency');
+          const notionalLeg2 = hasSecondLeg ? Math.max(100_000, Math.floor(notionalBase * (0.9 + Math.random() * 0.2))) : null;
+          
+          // Trade expiration and effective dates
+          const effectiveOffset = Math.floor(Math.random() * 30); // 0-30 days forward
+          const effectiveDate = new Date(executionTime.getTime() + effectiveOffset * 24 * 60 * 60 * 1000);
+          
+          // Expiration based on typical tenors
+          const tenors = [1, 3, 6, 12, 24, 36, 60, 84, 120, 180, 240, 360]; // months
+          const tenor = tenors[Math.floor(Math.random() * tenors.length)];
+          const expirationDate = new Date(effectiveDate.getTime() + tenor * 30 * 24 * 60 * 60 * 1000);
+          
+          // Spreads with appropriate distributions
+          const spreadLeg1 = (productType.includes('Fixed') || productType.includes('Option'))
+            ? `${(0.5 + Math.random() * 4.5).toFixed(4)}` // Fixed rates 0.5% to 5%
+            : `${(Math.random() * 2).toFixed(4)}`; // Floating spreads 0 to 2%
+            
+          const spreadLeg2 = hasSecondLeg
+            ? `${(Math.random() * 2).toFixed(4)}`
+            : null;
+            
+          // Strike prices for options
+          const strikePrice = productType.includes('Option')
+            ? `${(0.5 + Math.random() * 9.5).toFixed(2)}`
+            : null;
+            
+          // Other payment amounts (occasional upfront payments)
+          const hasOtherPayment = Math.random() > 0.8;
+          const otherPaymentAmount = hasOtherPayment
+            ? `${Math.floor(10000 + Math.random() * (notionalLeg1 * 0.05))}`
+            : null;
+            
+          // Action type (mostly new trades, some modifications)  
+          const actionType = Math.random() > 0.9 ? 'MODIFY' : 'NEW';
+          
+          return {
+            eventTimestamp: eventTime,
+            executionTimestamp: executionTime,
+            effectiveDate,
+            expirationDate,
+            notionalLeg1: notionalLeg1.toString(),
+            notionalLeg2: notionalLeg2?.toString() || null,
+            spreadLeg1,
+            spreadLeg2,
+            strikePrice,
+            otherPaymentAmount,
+            actionType,
+            assetClass: fetchParams.assetClass,
+            productType,
+            underlying,
+            rawData: {
+              tradeId: `T${Date.now().toString().slice(-8)}${i}`,
+              reporterId: `R${Math.floor(Math.random() * 1000)}`,
+              dealerId: `D${Math.floor(Math.random() * 100)}`,
+              clearingVenue: Math.random() > 0.6 ? 'CLEARED' : 'BILATERAL',
+              dealType: Math.random() > 0.7 ? 'INTERDEALER' : 'CUSTOMER'
+            }
+          };
+        });
+        
+        // Add chunk to the main array
+        mockTrades.push(...tradesChunk);
+      }
       
       const mockResponse: DTCCResponse = {
         trades: mockTrades,
@@ -92,58 +251,64 @@ export default function AssetClassTradesPage() {
           endDate: fetchParams.endDate,
           agency: fetchParams.agency,
           assetClass: fetchParams.assetClass,
-          fetchDuration: 1200,
-          cacheHit: false
+          fetchDuration: 1200 + Math.floor(Math.random() * 800), // Realistic fetch time
+          cacheHit: Math.random() > 0.7 // Sometimes hit cache for realism
         }
       };
-      
-      // If this was a real API call:
-      // if (!response.ok) {
-      //   const errorData = await response.json();
-      //   throw new Error(errorData.error || 'Failed to fetch data');
-      // }
-      // const data: DTCCResponse = await response.json();
       
       setTrades(mockResponse.trades);
       setMetadata(mockResponse.metadata);
       
       // Generate analytics
-      // In a real implementation, we would call the API
-      // const analyticsResponse = await fetch('/api/dtcc/analyze', {
-      //   method: 'PUT',
-      //   headers: {
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify({ trades: data.trades })
-      // });
+      // Aggregate trade data by product type
+      const volumeByProduct: Record<string, number> = {};
+      const timeDistribution: Record<string, number> = {};
+      const tradeSizeDistribution: Record<string, number> = {
+        '0-1M': 0,
+        '1M-10M': 0,
+        '10M-50M': 0,
+        '50M-100M': 0,
+        '100M+': 0
+      };
       
-      // Create mock analytics data
+      // Process trades for analytics
+      mockTrades.forEach(trade => {
+        // Aggregate by product type
+        const product = trade.productType || 'Unknown';
+        const notional = parseFloat(trade.notionalLeg1 || '0');
+        
+        volumeByProduct[product] = (volumeByProduct[product] || 0) + notional;
+        
+        // Time distribution (hour buckets)
+        const hour = trade.executionTimestamp.getHours();
+        const hourBucket = `${hour < 10 ? '0' : ''}${hour}:00-${hour < 10 ? '0' : ''}${hour}:59`;
+        timeDistribution[hourBucket] = (timeDistribution[hourBucket] || 0) + 1;
+        
+        // Size distribution
+        if (notional < 1_000_000) {
+          tradeSizeDistribution['0-1M']++;
+        } else if (notional < 10_000_000) {
+          tradeSizeDistribution['1M-10M']++;
+        } else if (notional < 50_000_000) {
+          tradeSizeDistribution['10M-50M']++;
+        } else if (notional < 100_000_000) {
+          tradeSizeDistribution['50M-100M']++;
+        } else {
+          tradeSizeDistribution['100M+']++;
+        }
+      });
+      
+      // Find largest trades
+      const largestTrades = [...mockTrades]
+        .sort((a, b) => parseFloat(b.notionalLeg1 || '0') - parseFloat(a.notionalLeg1 || '0'))
+        .slice(0, 10);
+      
       const mockAnalytics: DTCCAnalytics = {
         totalTrades: mockTrades.length,
-        volumeByProduct: {
-          'Swap': 250000000,
-          'Option': 150000000,
-          'Forward': 100000000,
-          'Future': 200000000
-        },
-        tradeSizeDistribution: {
-          '0-1M': 5,
-          '1M-10M': 20,
-          '10M-50M': 15,
-          '50M-100M': 8,
-          '100M+': 2
-        },
-        timeDistribution: {
-          '9:00-9:59': 8,
-          '10:00-10:59': 12,
-          '11:00-11:59': 15,
-          '12:00-12:59': 5,
-          '13:00-13:59': 3,
-          '14:00-14:59': 7
-        },
-        largestTrades: mockTrades.sort((a, b) => 
-          parseFloat(b.notionalLeg1 || '0') - parseFloat(a.notionalLeg1 || '0')
-        ).slice(0, 10)
+        volumeByProduct,
+        tradeSizeDistribution,
+        timeDistribution,
+        largestTrades
       };
       
       setAnalytics(mockAnalytics);

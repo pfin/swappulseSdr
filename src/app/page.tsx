@@ -1,6 +1,8 @@
+"use client";
+
 /**
  * Dashboard Page
- * 
+ *
  * Main dashboard page for the DTCC SDR Analyzer.
  */
 
