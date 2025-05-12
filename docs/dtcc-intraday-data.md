@@ -1,164 +1,251 @@
-# DTCC Intraday Data Documentation
+# DTCC Intraday Data Architecture
 
-## DTCC Intraday Data Structure
+## Overview
 
-The DTCC Swap Data Repository (SDR) publishes intraday data as a series of sequential batch files throughout the trading day. Each file contains new trades that were reported since the previous batch. Understanding how these files work is crucial for correctly processing intraday swap trade data.
+The DTCC Swap Data Repository (SDR) publishes intraday data as a series of sequential batch files throughout the trading day. Each batch contains new trades that were reported since the previous batch. The complete dataset for a day is built by accumulating all batches.
 
-### Key Characteristics
+## Key Concepts
+
+### Batch-Based Data
+
+Intraday swap trade data has several important characteristics:
 
 1. **Sequential Batch Files**: Intraday data is published in numbered batch files, starting from 1 and incrementing throughout the day as new trades are reported.
 
-2. **Cumulative Nature**: Each batch file contains only the new trades that occurred since the previous batch. To get the complete set of today's trades, you need to accumulate all the batch files.
+2. **Cumulative Nature**: Each batch only contains new trades since the previous batch. To get the complete set of today's trades, you need to accumulate all the batches.
 
 3. **File Monitoring**: To stay current with today's trades, you need to continuously check for new batch files and process them as they become available.
 
-## Implementation Guide
+### Server-Side Data Store
 
-### Fetching Intraday Data
+To ensure consistent data accumulation between client refreshes, the system uses a server-side singleton store:
 
-The correct approach for fetching intraday data is to:
+- Maintains accumulated trades in server memory
+- Tracks processed batch IDs to avoid duplicates
+- Preserves state between API requests
+- Provides APIs for incremental updates and full data access
 
-1. Start with the first batch file (ID = 1)
-2. Process each batch file in sequence
-3. Accumulate trades from all batches
-4. Regularly check for new batch files
+### Asynchronous Data Fetching
 
-```typescript
-// Example using the dtccService
-const fetchTodaysTrades = async () => {
-  const params: DTCCIntraDayParams = {
-    agency: 'DTCC',
-    assetClass: 'IR',
-    minSliceId: 1, // Start from the first batch
-    useCache: true // Enable caching for performance
-  };
-  
-  // This will fetch all available batch files and return accumulated trades
-  const response = await dtccService.fetchIntradayData(params);
-  
-  return response.trades;
-};
-```
+Data is fetched asynchronously from the server via:
 
-### Monitoring for New Data
+- Initial full data load
+- Polling for incremental updates
+- Stable UI updates to prevent jitter during refreshes
 
-To continuously monitor for new batch files, you can implement a polling mechanism:
+## Implementation Details
+
+### Server-Side Store (`dtccIntraDayStore.ts`)
+
+A singleton class that maintains the accumulated intraday data:
 
 ```typescript
-// Example of a monitoring function
-const monitorIntradayData = async () => {
-  // Initial fetch to get all current data
-  let currentResponse = await dtccService.fetchIntradayData({
-    agency: 'DTCC',
-    assetClass: 'IR',
-    minSliceId: 1,
-    useCache: true
-  });
-  
-  // Set up polling interval (e.g., check every 5 minutes)
-  const pollingInterval = 5 * 60 * 1000; // 5 minutes in milliseconds
-  
-  setInterval(async () => {
-    try {
-      // Check for new data since the last known batch
-      const newDataResponse = await dtccService.checkForNewIntradayData(
-        'DTCC',
-        'IR'
-      );
-      
-      // If new trades were found, process them
-      if (newDataResponse.trades.length > 0) {
-        console.log(`Found ${newDataResponse.trades.length} new trades in batch(es)`, 
-                    newDataResponse.metadata.processedSliceIds);
-        
-        // Merge with existing data
-        currentResponse.trades = [
-          ...currentResponse.trades,
-          ...newDataResponse.trades
-        ];
-        
-        // Trigger any necessary updates (e.g., update UI, recalculate analytics)
-        onNewTradesReceived(newDataResponse.trades);
-      }
-    } catch (error) {
-      console.error('Error checking for new intraday data:', error);
-    }
-  }, pollingInterval);
-};
+class DTCCIntraDayStore {
+  private static instance: DTCCIntraDayStore;
+  private data: Record<string, AgencyClassData> = {};
+
+  // Methods for data management
+  public addBatch(agency, assetClass, batchId, trades): void
+  public getAllTrades(agency, assetClass): DTCCTrade[]
+  public getNewTradesSince(agency, assetClass, lastKnownBatchId): { trades, processedBatchIds, highestBatchId }
+  public getMetadata(agency, assetClass): { totalTrades, batchCount, lastKnownBatchId, lastUpdated, batchIds }
+  public resetStore(agency, assetClass): void
+}
 ```
 
-## API Usage
+Key features:
+- Separates data by agency and asset class
+- Tracks each batch separately to avoid duplicates
+- Maintains an accumulated view of all trades
+- Updates the last known batch ID for each data set
 
-The intraday API endpoint supports several query parameters:
+### React Hook (`useIntradayData.ts`)
 
-- `agency`: The reporting agency (e.g., 'DTCC')
-- `assetClass`: The asset class (e.g., 'IR', 'CR', 'EQ', 'FX', 'CO')
-- `minSliceId`: The first batch ID to fetch (default: 1)
-- `lastKnownSliceId`: The last batch ID that was previously fetched (for incremental updates)
-- `useCache`: Whether to use cached data (default: true)
-- `checkNew`: Whether to only check for new data since the last known batch (default: false)
+A custom React hook for client-side data management:
+
+```typescript
+export const useIntradayData = ({
+  agency,
+  assetClass,
+  pollingInterval = 30000,
+  enabled = true,
+  onNewData
+}: UseIntradayDataOptions) => {
+  // Returns:
+  // - trades: Accumulated trade data
+  // - metadata: Information about the dataset
+  // - isLoading: Loading state
+  // - isPolling: Polling state
+  // - error: Error state
+  // - refresh: Function to manually refresh data
+  // - reset: Function to reset data
+}
+```
+
+Key features:
+- Automatic polling for new data
+- Race condition prevention with refs
+- Stable state updates to prevent UI jitter
+- Error handling and loading states
+
+### API Route (`route.ts`)
+
+The intraday API endpoint provides access to the server-side store:
+
+```typescript
+// GET /api/dtcc/intraday
+export async function GET(request: NextRequest) {
+  // Query parameters:
+  // - agency: 'CFTC' | 'SEC'
+  // - assetClass: 'RATES' | 'CREDITS' | 'EQUITIES' | 'FOREX' | 'COMMODITIES'
+  // - minSliceId: The first batch ID to fetch (default: 1)
+  // - lastKnownSliceId: The last known batch ID for incremental updates
+  // - reset: Whether to reset the store (default: false)
+  // - checkNew: Whether to check for new data since the last known batch
+  // - generateMockBatch: Generate a new mock batch for testing
+}
+```
+
+Supported operations:
+- Full data retrieval
+- Incremental updates
+- Store reset
+- Mock data generation for testing
+
+## Usage Examples
+
+### Fetching Intraday Data with the React Hook
+
+```typescript
+// Example using the useIntradayData hook
+const {
+  trades,
+  metadata,
+  isLoading,
+  isPolling,
+  error,
+  refresh,
+  reset
+} = useIntradayData({
+  agency: 'CFTC',
+  assetClass: 'RATES',
+  pollingInterval: 30000,
+  enabled: true,
+  onNewData: (newTrades) => {
+    console.log(`Received ${newTrades.length} new trades`);
+  }
+});
+```
+
+### Integrating with UI Components
+
+```tsx
+<div>
+  <h2>Intraday Monitor: {selectedAssetClass}</h2>
+  <p>
+    Showing {trades.length} trades • Last batch: {metadata.lastKnownSliceId} •
+    Last updated: {metadata.lastUpdated?.toLocaleTimeString() || 'N/A'}
+  </p>
+
+  {/* Trade Table */}
+  <TradeTable
+    trades={trades}
+    loading={isLoading}
+  />
+
+  {/* Controls */}
+  <div>
+    <button onClick={refresh} disabled={isLoading || isPolling}>
+      Refresh Now
+    </button>
+    <button onClick={reset}>
+      Reset Data
+    </button>
+  </div>
+</div>
+```
 
 ### Example API Requests
 
 #### Initial Data Fetch
 
 ```
-GET /api/dtcc/intraday?agency=DTCC&assetClass=IR&minSliceId=1&useCache=true
+GET /api/dtcc/intraday?agency=CFTC&assetClass=RATES
 ```
 
-This returns all available trades from all batches starting from batch ID 1.
+This returns all accumulated trades from all batches.
 
 #### Check for New Data
 
 ```
-GET /api/dtcc/intraday?agency=DTCC&assetClass=IR&checkNew=true
+GET /api/dtcc/intraday?agency=CFTC&assetClass=RATES&checkNew=true&lastKnownSliceId=5
 ```
 
-This checks for new batches since the last known batch ID and returns only the new trades.
+This checks for new batches since batch ID 5 and returns only the new trades.
 
-## Working with the DTCC Intraday Data Cache
+#### Reset and Generate Test Data
 
-The system maintains a cache of accumulated intraday data to improve performance. The cache is structured as follows:
+```
+GET /api/dtcc/intraday?agency=CFTC&assetClass=RATES&reset=true&generateMockBatch=true
+```
 
-1. **Cache Key**: `${agency}_${assetClass}_${yyyy-MM-dd}`
-2. **Cache Value**: An object containing:
-   - `trades`: Array of accumulated trades
-   - `metadata`: Object with information about the cached data
-     - `highestSliceId`: The highest batch ID included in the cache
-     - `lastUpdated`: When the cache was last updated
-     - `batchCounts`: Map of batch IDs to the number of trades in each batch
+This resets the store and generates a mock batch for testing.
 
-### Cache Invalidation
+## Testing
 
-The cache is automatically invalidated at the start of each new trading day. You can also manually invalidate the cache by setting `useCache=false` in your API requests.
+The system includes tests to validate the batch-based accumulation logic:
+
+- `intradayTests.ts`: Tests batch accumulation and batch ID tracking
+- Test page at `/tests/intraday`: UI for running and monitoring tests
+
+Example test results:
+
+```
+✅ Batch accumulation test passed! Correct accumulation and deduplication.
+✅ Last known batch ID tracking test passed!
+✅ All intraday tests passed!
+```
+
+## Best Practices
+
+1. **Always accumulate batches**: Never replace the entire dataset, only add new trades to maintain consistency.
+2. **Track batch IDs**: Properly track the last known batch ID to avoid duplicate processing.
+3. **Handle race conditions**: Use refs and proper state management to prevent UI jitter during updates.
+4. **Use server-side state**: Maintain accumulated data on the server to ensure consistency between refreshes.
+5. **Implement error handling**: Properly handle network errors and retry mechanisms.
+6. **Prevent duplicate batches**: Check if a batch has already been processed before adding its trades.
+7. **Stable state updates**: Use stable references to prevent unnecessary UI rerenders.
 
 ## Common Issues and Troubleshooting
 
 ### Missing Trades
 
-If you notice missing trades, ensure you're starting from batch ID 1 and processing all batches sequentially. Remember that each batch only contains new trades since the previous batch.
+If you notice missing trades, check the following:
+
+1. Ensure the server-side store is initialized and properly accumulating batches
+2. Verify that the `lastKnownBatchId` tracking is working correctly
+3. Check that all batches starting from 1 are being processed
+4. Look at the API response to verify batch IDs are sequential
 
 ### Duplicate Trades
 
-To avoid duplicate trades when implementing real-time monitoring, always keep track of the last processed batch ID and only process new batches.
+The server-side store prevents duplicates by tracking which batches have been processed. If you see duplicates:
+
+1. Check the `addBatch` implementation to ensure it's checking for existing batches
+2. Verify that batch IDs are correctly assigned and tracked
+3. Check the client-side handling of new trades to ensure they're not added twice
 
 ### Performance Considerations
 
-Processing large numbers of batches can be resource-intensive. Consider these optimizations:
+Optimizations for handling large volumes of intraday data:
 
-1. Use caching to avoid repeatedly processing the same batches
-2. Implement incremental updates to only process new batches
-3. Schedule batch processing during off-peak hours for historical analysis
-
-## Migration from Timestamp-Based to Batch-Based Processing
-
-If you're migrating from the old timestamp-based approach to the new batch-based approach, here are the key changes:
-
-1. Replace `startTimestamp` and `endTimestamp` with `minSliceId`
-2. Implement accumulation of trades from all batches
-3. Set up monitoring for new batches
-4. Update any analysis code to handle the accumulated dataset
+1. Use incremental updates with `checkNew=true` and `lastKnownBatchId`
+2. Implement pagination in the UI to show a subset of trades
+3. Use memoization for derived calculations to prevent redundant processing
+4. Consider batch compression techniques for historical analysis
 
 ## Conclusion
 
-Understanding the batch-based nature of DTCC intraday data is crucial for correctly processing swap trade data. By following the guidance in this document, you can ensure your application correctly handles intraday data and stays current with new trades throughout the trading day.
+The server-side store approach for DTCC intraday data ensures consistent data accumulation between client refreshes. By maintaining state on the server and using React hooks for asynchronous data fetching, we can provide a stable and accurate view of intraday swap trade data.
+
+The combination of batch tracking, incremental updates, and race condition prevention creates a robust solution that handles the unique requirements of batch-based intraday data processing.
