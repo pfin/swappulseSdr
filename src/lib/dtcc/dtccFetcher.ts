@@ -104,42 +104,62 @@ export class DTCCFetcher {
   /**
    * Fetch intraday reports from DTCC
    * 
-   * Note: DTCC intraday data identifiers are sequential numbers starting from 1
-   * and incrementing throughout the day. They don't refer to timestamps but rather
-   * to batch sequence numbers.
+   * Note: DTCC intraday data is published in sequential batch files.
+   * Each file has an ID starting from 1 and incrementing throughout the day.
+   * Each file contains new trades as they occur, so to get all of today's trades,
+   * we need to accumulate all batch files published so far.
    */
   public async fetchIntradayReports(params: DTCCIntraDayParams): Promise<DTCCTrade[]> {
     const { 
       agency, 
       assetClass,
-      maxSlices = 10 // Default to fetching up to 10 most recent intraday slices
+      minSliceId = 1 // Start from the first slice by default
     } = params;
     
-    // Fetch intraday slice IDs without timestamp filtering
+    // Get all available intraday slice IDs
     const sliceIds = await this.getDTCCIntradaySliceIds(agency, assetClass);
     
     if (!sliceIds || sliceIds.length === 0) {
       return [];
     }
     
-    // Sort slice IDs numerically in descending order (most recent first)
-    // Since intraday slice IDs are sequential numbers
-    const sortedSliceIds = sliceIds
+    // Sort slice IDs numerically
+    const numericSliceIds = sliceIds
       .map(id => parseInt(id, 10))
-      .filter(id => !isNaN(id))
-      .sort((a, b) => b - a) // Descending order
-      .map(id => id.toString());
+      .filter(id => !isNaN(id));
+      
+    if (numericSliceIds.length === 0) {
+      return [];
+    }
     
-    // Limit to the specified number of most recent slices
-    const recentSliceIds = sortedSliceIds.slice(0, maxSlices);
+    // Find the highest slice ID (most recent)
+    const highestSliceId = Math.max(...numericSliceIds);
+    const lowestSliceId = Math.min(...numericSliceIds);
+    
+    console.log(`Found intraday slices from ${lowestSliceId} to ${highestSliceId}`);
+    
+    // Determine which slices to fetch (from minSliceId to highestSliceId)
+    const startSliceId = Math.max(minSliceId, lowestSliceId);
+    const sliceIdsToFetch: number[] = [];
+    
+    for (let id = startSliceId; id <= highestSliceId; id++) {
+      if (numericSliceIds.includes(id)) {
+        sliceIdsToFetch.push(id);
+      }
+    }
+    
+    console.log(`Fetching ${sliceIdsToFetch.length} intraday slices from ${startSliceId} to ${highestSliceId}`);
     
     // Fetch data for each slice
     const allResults: DTCCTrade[] = [];
     
-    for (const sliceId of recentSliceIds) {
-      const result = await this.fetchDTCCData(agency, assetClass, sliceId, true);
+    for (const sliceId of sliceIdsToFetch) {
+      const result = await this.fetchDTCCData(agency, assetClass, sliceId.toString(), true);
       if (result && result.length > 0) {
         allResults.push(...result);
+        console.log(`Fetched ${result.length} trades from slice ${sliceId}`);
+      } else {
+        console.log(`No trades found in slice ${sliceId}`);
       }
     }
     
@@ -167,7 +187,7 @@ export class DTCCFetcher {
       const intradayParams: DTCCIntraDayParams = {
         agency,
         assetClass,
-        maxSlices: 20 // Fetch up to 20 most recent intraday slices for today
+        minSliceId: 1 // Fetch all available intraday slices starting from the first one
       };
       
       const intradayData = await this.fetchIntradayReports(intradayParams);
@@ -312,8 +332,9 @@ export class DTCCFetcher {
   /**
    * Get DTCC intraday slice IDs
    * 
-   * Intraday slices are identified by sequential numbers starting from 1
-   * and incrementing throughout the day.
+   * Retrieves all available intraday batch file IDs. Each batch file contains
+   * a set of trades published at a specific point in time. The complete set of
+   * today's trades is the accumulated data from all batch files.
    */
   private async getDTCCIntradaySliceIds(
     agency: Agency,
@@ -357,13 +378,11 @@ export class DTCCFetcher {
       if (response.status === 200 && response.data) {
         const sliceData = response.data;
         
-        // Extract only the sequence numbers from slice IDs
-        // Format is typically: AGENCY_SLICE_ASSETCLASS_NUMBER.zip
+        // Extract sequential batch numbers from slice IDs
         return sliceData.map((slice: any) => {
           const fileName = slice.fileName.toString();
           const parts = fileName.split(`_${assetClass}_`);
           if (parts.length > 1) {
-            // The part after ASSETCLASS_ is just a sequence number
             return parts[1].split('.')[0];
           }
           return null;
