@@ -21,7 +21,6 @@ import { parseISO } from 'date-fns';
  * - lastKnownSliceId: number (optional) - The last known batch ID
  * - reset: boolean (optional) - Whether to reset the store (default: false)
  * - checkNew: boolean (optional) - Whether to check for new data since the last known batch
- * - generateMockBatch: boolean (optional) - Generate a new mock batch for testing
  *
  * Note: startTimestamp and endTimestamp are deprecated for intraday data
  */
@@ -36,7 +35,6 @@ export async function GET(request: NextRequest) {
     const lastKnownSliceIdStr = searchParams.get('lastKnownSliceId');
     const reset = searchParams.get('reset') === 'true';
     const checkNew = searchParams.get('checkNew') === 'true';
-    const generateMockBatch = searchParams.get('generateMockBatch') === 'true';
 
     // Validate required parameters
     if (!agency || !assetClass) {
@@ -50,27 +48,6 @@ export async function GET(request: NextRequest) {
     if (reset) {
       console.log(`Resetting intraday store for ${agency}-${assetClass}`);
       intraDayStore.resetStore(agency, assetClass);
-
-      // Initialize with batch 1
-      const initialBatchTrades = intraDayStore.generateMockBatch(agency, assetClass, 1, 10);
-      intraDayStore.addBatch(agency, assetClass, 1, initialBatchTrades);
-    }
-
-    // Generate a new mock batch for testing if requested
-    if (generateMockBatch) {
-      const metadata = intraDayStore.getMetadata(agency, assetClass);
-      const newBatchId = metadata.lastKnownBatchId + 1;
-
-      console.log(`Generating new mock batch ${newBatchId} for ${agency}-${assetClass}`);
-      const newBatchTrades = intraDayStore.generateMockBatch(
-        agency,
-        assetClass,
-        newBatchId,
-        Math.floor(Math.random() * 5) + 3 // 3-7 trades in each batch
-      );
-
-      // Add the new batch to the store
-      intraDayStore.addBatch(agency, assetClass, newBatchId, newBatchTrades);
     }
 
     // Check if we should only look for new data
@@ -115,16 +92,6 @@ export async function GET(request: NextRequest) {
     const lastKnownSliceId = lastKnownSliceIdStr ? parseInt(lastKnownSliceIdStr, 10) : 0;
 
     console.log(`Fetching all intraday data for ${agency}-${assetClass}`);
-
-    // Check if we have any data for this agency/assetClass
-    const metadata = intraDayStore.getMetadata(agency, assetClass);
-
-    // If the store is empty, initialize with batch 1
-    if (metadata.totalTrades === 0) {
-      console.log(`No data found for ${agency}-${assetClass}, generating initial batch`);
-      const initialBatchTrades = intraDayStore.generateMockBatch(agency, assetClass, 1, 10);
-      intraDayStore.addBatch(agency, assetClass, 1, initialBatchTrades);
-    }
 
     // Get all accumulated trades
     const allTrades = intraDayStore.getAllTrades(agency, assetClass);
