@@ -123,14 +123,16 @@ export class DTCCService {
    */
   public async fetchIntradayData(params: DTCCIntraDayParams): Promise<DTCCResponse> {
     const startTime = Date.now();
+    const today = new Date();
     
     try {
       // Try to get from cache first if caching is enabled
-      const today = new Date();
-      const cachedData = await this.getFromCache({
-        ...params,
-        startDate: today,
-        endDate: today
+      const cacheKey = `intraday_${params.agency}_${params.assetClass}_${format(today, 'yyyy-MM-dd')}`;
+      const cachedData = await this.cache.get({
+        agency: params.agency,
+        assetClass: params.assetClass,
+        date: format(today, 'yyyy-MM-dd'),
+        isIntraday: true
       });
       
       if (cachedData) {
@@ -154,10 +156,11 @@ export class DTCCService {
       const trades = await this.fetcher.fetchIntradayReports(params);
       
       // Store in cache
-      await this.storeInCache({
-        ...params,
-        startDate: today,
-        endDate: today
+      await this.cache.set({
+        agency: params.agency,
+        assetClass: params.assetClass,
+        date: format(today, 'yyyy-MM-dd'),
+        isIntraday: true
       }, trades);
       
       const endTime = Date.now();
@@ -181,8 +184,8 @@ export class DTCCService {
         trades: [],
         metadata: {
           count: 0,
-          startDate: new Date(),
-          endDate: new Date(),
+          startDate: today,
+          endDate: today,
           agency: params.agency,
           assetClass: params.assetClass,
           fetchDuration: Date.now() - startTime,
@@ -207,10 +210,12 @@ export class DTCCService {
       const needsIntraday = params.endDate >= today;
       
       if (needsIntraday) {
-        // Fetch intraday data
+        // Fetch intraday data - focus on latest batches
         const intradayParams: DTCCIntraDayParams = {
           agency: params.agency,
-          assetClass: params.assetClass
+          assetClass: params.assetClass,
+          maxSlices: 20, // Fetch up to 20 most recent intraday slices for today
+          useCache: params.useCache
         };
         
         const intradayResponse = await this.fetchIntradayData(intradayParams);
