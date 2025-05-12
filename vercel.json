@@ -1,0 +1,21 @@
+{
+  "name": "swappulseSdr",
+  "version": 2,
+  "public": true,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "regions": ["iad1"],
+  "env": {
+    "NEXT_PUBLIC_API_URL": "",
+    "CACHE_TTL": "3600",
+    "MAX_CACHE_ITEMS": "100000"
+  },
+  "github": {
+    "silent": true,
+    "autoJobCancelation": true
+  }
+}
