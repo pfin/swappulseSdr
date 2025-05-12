@@ -6,65 +6,114 @@ This document explains how the DTCC intraday data system works and how it's impl
 
 ## DTCC Intraday Data Structure
 
-The DTCC Swap Data Repository (SDR) provides intraday data in sequential batches. Unlike historical data which is organized by date, intraday data is identified by sequential batch numbers that increment throughout the day. Understanding this structure is crucial for correctly retrieving and processing intraday swap trade data.
+The DTCC Swap Data Repository (SDR) publishes intraday data as a series of sequential batch files throughout the trading day. Each file contains new trades that were reported since the previous batch. Understanding how these files work is crucial for correctly processing intraday swap trade data.
 
 ### Key Characteristics
 
-1. **Sequential Batch Numbers**: Intraday data is organized into sequential batches, starting from 1 and incrementing with each new batch.
+1. **Sequential Batch Files**: Intraday data is published in numbered batch files, starting from 1 and incrementing throughout the day as new trades are reported.
 
-2. **No Direct Timestamp Correlation**: The batch numbers themselves don't directly represent timestamps. They simply indicate the sequence in which the batches were processed.
+2. **Cumulative Nature**: Each batch file contains only the new trades that occurred since the previous batch. To get the complete set of today's trades, you need to accumulate all the batch files.
 
-3. **Unknown Timing**: We don't know exactly when during the day a particular trade occurred, only that it was included in a specific batch.
+3. **File Monitoring**: To stay current with today's trades, you need to continuously check for new batch files and process them as they become available.
 
-4. **Most Recent First**: When analyzing intraday data, typically the most recent batches (highest numbers) are of greatest interest.
+4. **Continuous Publication**: New batch files are published throughout the trading day as trades are reported to the SDR.
 
 ## Implementation Details
 
 ### Fetching Intraday Data
 
-Our implementation in `DTCCFetcher.ts` follows these steps to fetch intraday data:
+Our implementation in `DTCCFetcher.ts` and `DTCCService.ts` follows these steps to fetch intraday data:
 
 1. **Get Available Slice IDs**: The `getDTCCIntradaySliceIds` method retrieves all available intraday slice IDs for the current day.
 
-2. **Sort by Most Recent**: Slice IDs are converted to numbers, sorted in descending order (most recent first).
+2. **Track Last Processed ID**: We keep track of the highest slice ID that we've already processed to avoid redundant fetching.
 
-3. **Limit by maxSlices**: We fetch only the most recent N slices, where N is controlled by the `maxSlices` parameter (default: 10).
+3. **Fetch New Batches**: For each new batch file (from last known ID + 1 to the highest available ID), we fetch and process the data.
 
-4. **Process Each Slice**: For each slice ID, we fetch and process the data.
+4. **Accumulate Trades**: New trades are added to the accumulated dataset, which is cached for future use.
+
+### Tracking Mechanism
+
+To efficiently track which batch files have been processed, the implementation uses several approaches:
+
+1. **In-Memory Tracking**: The `lastKnownSliceIds` object in `DTCCService` keeps track of the highest slice ID processed for each agency/asset class combination.
+
+2. **Cache-Based Tracking**: The last known slice ID is also stored in the cache with a special key for persistence across sessions.
+
+3. **Incremental Updates**: The `checkForNewIntradayData` method only fetches data from batch files that haven't been processed yet.
 
 ### API Usage
 
-When using the intraday API endpoint, you can control how many recent batches to fetch:
+#### Basic Usage
+
+To fetch all intraday data for a specific asset class:
 
 ```
-GET /api/dtcc/intraday?agency=CFTC&assetClass=RATES&maxSlices=15
+GET /api/dtcc/intraday?agency=CFTC&assetClass=RATES
 ```
 
-This would fetch the 15 most recent intraday data batches for CFTC RATES data.
+This fetches all available intraday batch files, accumulating the trades.
 
-### Caching
+#### Incremental Updates
 
-Intraday data is cached separately from historical data, with the `isIntraday` flag set to `true`. This allows for efficient refreshing of intraday data without affecting the historical data cache.
+To check for new data since the last fetch:
+
+```
+GET /api/dtcc/intraday?agency=CFTC&assetClass=RATES&checkNew=true
+```
+
+This only fetches new batch files that have been published since the last check.
+
+#### Manual Control
+
+To start from a specific batch ID:
+
+```
+GET /api/dtcc/intraday?agency=CFTC&assetClass=RATES&minSliceId=5
+```
+
+This starts fetching from batch #5 onwards.
+
+### Caching Strategy
+
+Intraday data uses a specialized caching strategy:
+
+1. **Accumulated Data Cache**: The accumulated trades from all processed batch files are cached with the current date as the key.
+
+2. **Last Known ID Cache**: The last processed batch ID is cached separately to enable incremental updates.
+
+3. **Cache Invalidation**: The cache is automatically invalidated at the start of a new trading day.
+
+## Example: Real-Time Monitoring
+
+To implement real-time monitoring of intraday trades:
+
+```typescript
+// Initial fetch of all available data
+const initialResponse = await dtccService.fetchIntradayData({
+  agency: 'CFTC',
+  assetClass: 'RATES'
+});
+
+// Process initial data
+processTrades(initialResponse.trades);
+
+// Set up polling for new data
+setInterval(async () => {
+  const newDataResponse = await dtccService.checkForNewIntradayData('CFTC', 'RATES');
+  
+  if (newDataResponse.metadata.processedSliceIds && 
+      newDataResponse.metadata.processedSliceIds.length > 0) {
+    console.log(`Found ${newDataResponse.trades.length} new trades in batches ${newDataResponse.metadata.processedSliceIds.join(', ')}`);
+    processTrades(newDataResponse.trades);
+  }
+}, 60000); // Check every minute
+```
 
 ## Important Notes
 
-- **Timestamp Parameters Deprecated**: The `startTimestamp` and `endTimestamp` parameters are deprecated as they don't align with how DTCC intraday data actually works.
+- **Complete Dataset**: To get the complete set of today's trades, always use the accumulated data approach rather than focusing only on the most recent batch.
 
-- **Refresh Frequently**: Intraday data should be refreshed frequently to get the latest trades.
+- **Polling Frequency**: The polling frequency should be balanced between staying current and avoiding excessive API calls.
 
-- **Memory Usage**: Be mindful of the `maxSlices` parameter, as setting it too high can lead to excessive memory usage, especially on serverless platforms like Vercel.
-
-## Example
-
-To fetch the 20 most recent intraday data batches for CFTC RATES data:
-
-```typescript
-const intradayParams: DTCCIntraDayParams = {
-  agency: 'CFTC',
-  assetClass: 'RATES',
-  maxSlices: 20,
-  useCache: false // Set to false to bypass cache and get fresh data
-};
-
-const response = await dtccService.fetchIntradayData(intradayParams);
-```
+- **Day Boundaries**: The batch numbering resets at the start of each trading day, so your monitoring system should handle day transitions appropriately.
