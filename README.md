@@ -1,4 +1,4 @@
-# DTCC SDR Analyzer
+# SwappulseSDR
 
 A comprehensive web application for analyzing swap data reported to the DTCC Swap Data Repository (SDR). This application fetches, processes, visualizes, and analyzes swap market data from the DTCC SDR public data portal.
 
@@ -27,7 +27,7 @@ This project provides a Next.js-based interface for accessing, analyzing, and vi
 ## Project Structure
 
 ```
-dtcc-sdr-analyzer/
+swappulseSdr/
 ├── docs/              # Documentation
 │   ├── application-architecture.md
 │   ├── dtcc-sdr-analysis.md
@@ -77,8 +77,8 @@ dtcc-sdr-analyzer/
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/dtcc-sdr-analyzer.git
-   cd dtcc-sdr-analyzer
+   git clone https://github.com/pfin/swappulseSdr.git
+   cd swappulseSdr
    ```
 
 2. Install dependencies:
@@ -92,6 +92,41 @@ dtcc-sdr-analyzer/
    ```
 
 4. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Vercel Deployment
+
+### One-Click Deployment
+
+You can deploy this application to Vercel with one click:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fpfin%2FswappulseSdr)
+
+### Manual Deployment
+
+1. Fork this repository to your GitHub account
+2. Create a new project on [Vercel](https://vercel.com)
+3. Connect your GitHub account and select the repository
+4. Configure the project with:
+   - Framework Preset: `Next.js`
+   - Build Command: `npm run build`
+   - Output Directory: `.next`
+   - Install Command: `npm install`
+5. Click "Deploy"
+
+### Environment Variables
+
+For production deployments, you can configure the following environment variables in your Vercel project settings:
+
+- `NEXT_PUBLIC_API_URL`: Base URL for the DTCC API (optional, defaults to the public endpoint)
+- `CACHE_TTL`: Time-to-live for the cache in seconds (optional, defaults to 3600)
+- `MAX_CACHE_ITEMS`: Maximum number of items to store in cache (optional, defaults to 100000)
+
+### Domain Setup
+
+After deployment:
+1. Go to your Vercel project dashboard
+2. Navigate to "Settings" > "Domains"
+3. Add a custom domain if needed
 
 ## Testing
 
