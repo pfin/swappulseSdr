@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DTCCService } from '@/lib/dtcc/dtccService';
 import { Agency, AssetClass, DTCCIntraDayParams } from '@/types/dtcc';
-import { parseISO } from 'date-fns';
 
 // Initialize the DTCC service
 const dtccService = new DTCCService();
@@ -19,11 +18,14 @@ const dtccService = new DTCCService();
  * Query parameters:
  * - agency: 'CFTC' | 'SEC'
  * - assetClass: 'RATES' | 'CREDITS' | 'EQUITIES' | 'FOREX' | 'COMMODITIES'
- * - maxSlices: number (optional, default: 10) - Maximum number of most recent slices to fetch
- * - useCache: boolean (optional)
+ * - minSliceId: number (optional) - The first slice ID to fetch (default: 1)
+ * - lastKnownSliceId: number (optional) - The last slice ID that was previously fetched
+ * - useCache: boolean (optional) - Whether to use cached data (default: true)
+ * - checkNew: boolean (optional) - Only check for new data since the last fetch
  * 
- * Note: startTimestamp and endTimestamp parameters are deprecated as intraday data
- * is identified by sequential batch numbers, not timestamps.
+ * Note: Intraday data is published in sequential batch files. Each file has an ID 
+ * starting from 1 and incrementing throughout the day. To get all of today's trades,
+ * you need to accumulate all batch files published so far.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -32,8 +34,10 @@ export async function GET(request: NextRequest) {
     // Get query parameters
     const agency = searchParams.get('agency') as Agency;
     const assetClass = searchParams.get('assetClass') as AssetClass;
-    const maxSlicesStr = searchParams.get('maxSlices');
+    const minSliceIdStr = searchParams.get('minSliceId');
+    const lastKnownSliceIdStr = searchParams.get('lastKnownSliceId');
     const useCache = searchParams.get('useCache') !== 'false';
+    const checkNew = searchParams.get('checkNew') === 'true';
     
     // Validate required parameters
     if (!agency || !assetClass) {
@@ -43,14 +47,22 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Parse maxSlices if provided
-    const maxSlices = maxSlicesStr ? parseInt(maxSlicesStr, 10) : undefined;
+    // Parse numeric parameters
+    const minSliceId = minSliceIdStr ? parseInt(minSliceIdStr, 10) : undefined;
+    const lastKnownSliceId = lastKnownSliceIdStr ? parseInt(lastKnownSliceIdStr, 10) : undefined;
+    
+    // Check if we should only look for new data
+    if (checkNew) {
+      const response = await dtccService.checkForNewIntradayData(agency, assetClass);
+      return NextResponse.json(response);
+    }
     
     // Create fetch parameters
     const fetchParams: DTCCIntraDayParams = {
       agency,
       assetClass,
-      maxSlices,
+      minSliceId,
+      lastKnownSliceId,
       useCache
     };
     
