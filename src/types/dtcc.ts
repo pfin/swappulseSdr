@@ -49,9 +49,14 @@ export interface DTCCFetchParams {
 }
 
 export interface DTCCIntraDayParams extends Omit<DTCCFetchParams, 'startDate' | 'endDate'> {
-  startTimestamp?: Date;         // Optional: start timestamp for filtering (deprecated)
-  endTimestamp?: Date;           // Optional: end timestamp for filtering (deprecated)
-  maxSlices?: number;            // Maximum number of intraday slices to fetch (most recent first)
+  startTimestamp?: Date;         // Deprecated: intraday data uses batch IDs, not timestamps
+  endTimestamp?: Date;           // Deprecated: intraday data uses batch IDs, not timestamps
+  
+  // For cumulative data fetching
+  minSliceId?: number;           // The first slice ID to fetch (default: 1)
+  
+  // For monitoring new data
+  lastKnownSliceId?: number;     // The last slice ID that was previously fetched
 }
 
 export interface DTCCResponse {
@@ -64,6 +69,9 @@ export interface DTCCResponse {
     assetClass: AssetClass;
     fetchDuration: number;
     cacheHit?: boolean;
+    // For intraday data
+    highestSliceId?: number;     // The highest slice ID available
+    processedSliceIds?: number[]; // The slice IDs that were processed in this request
   };
 }
 
