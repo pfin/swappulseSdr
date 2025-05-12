@@ -7,7 +7,7 @@
  */
 
 import { useParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Layout from '@/components/layout/Layout';
 import DataFetchForm from '@/components/data/DataFetchForm';
 import TradeTable from '@/components/data/TradeTable';
@@ -121,30 +121,15 @@ export default function AssetClassTradesPage() {
       queryParams.append('endDate', fetchParams.endDate.toISOString());
       queryParams.append('useCache', fetchParams.useCache ? 'true' : 'false');
       
-      console.log(`Fetching data from: /api/dtcc/historical?${queryParams.toString()}`);
-      
-      // Simulate API response for demonstration
-      // In a real implementation, we would fetch from the API
-      // const response = await fetch(`/api/dtcc/historical?${queryParams.toString()}`);
+      // For Vercel deployment, use a smaller number of trades
+      const tradeCount = 1000; // Reduced for memory constraints
       
       // Get appropriate product types and underlyings for the selected asset class
       const productTypes = getProductTypes(fetchParams.assetClass);
       const underlyings = getUnderlyings(fetchParams.assetClass);
       
-      // For demonstration, create mock data with appropriate number of trades
-      // We'll use fewer trades in production to avoid Vercel Edge runtime memory limitations
-      // And more trades in development for better testing
-      const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
-      // Use 1000 trades for production (Vercel) and 3200 for development (localhost)
-      const tradeCount = isProduction ? 1000 : 3200;
-      
-      // Only log in non-production environments
-      if (!isProduction) {
-        console.log(`Generating ${tradeCount} mock trades for ${fetchParams.assetClass}`);
-      }
-      
       // Create trades in smaller chunks to reduce memory pressure
-      const chunkSize = 500;
+      const chunkSize = 200;
       const mockTrades: DTCCTrade[] = [];
       
       // Generate trades in chunks to avoid memory issues
@@ -312,8 +297,7 @@ export default function AssetClassTradesPage() {
       };
       
       setAnalytics(mockAnalytics);
-      
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching data:', err);
       setError((err as Error).message || 'An error occurred');
     } finally {

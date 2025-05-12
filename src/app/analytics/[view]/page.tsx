@@ -33,6 +33,8 @@ export default function AnalyticsViewPage() {
         return 'Product Distribution Analysis';
       case 'time':
         return 'Time Distribution Analysis';
+      case 'correlation':
+        return 'Correlation Analysis';
       default:
         return 'Analytics';
     }
@@ -142,7 +144,7 @@ export default function AnalyticsViewPage() {
         </div>
       );
     }
-    
+
     switch(view.toLowerCase()) {
       case 'volume':
         return (
@@ -169,6 +171,18 @@ export default function AnalyticsViewPage() {
             <div className="h-96">
               <TimeDistributionChart analytics={analytics} height={400} />
             </div>
+          </div>
+        );
+      case 'correlation':
+        return (
+          <div className="bg-white p-6 rounded-lg shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Correlation Analysis</h2>
+            <p>
+              For detailed correlation analysis, please visit the dedicated
+              <a href="/analytics/correlation" className="text-indigo-600 hover:text-indigo-800 font-medium ml-1">
+                Correlation Analysis Dashboard
+              </a>.
+            </p>
           </div>
         );
       default:
