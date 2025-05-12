@@ -16,29 +16,34 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { 
-    name: 'Dashboard', 
-    path: '/', 
+  {
+    name: 'Dashboard',
+    path: '/',
     description: 'Overview of DTCC SDR data and analytics'
   },
-  { 
-    name: 'Trades', 
-    path: '/trades', 
+  {
+    name: 'Trades',
+    path: '/trades',
     description: 'Search and analyze DTCC trade data'
   },
-  { 
-    name: 'Analytics', 
-    path: '/analytics', 
+  {
+    name: 'Intraday',
+    path: '/intraday',
+    description: 'Real-time monitoring of intraday data'
+  },
+  {
+    name: 'Analytics',
+    path: '/analytics',
     description: 'Detailed analytics and visualizations'
   },
-  { 
-    name: 'Saved Queries', 
-    path: '/saved-queries', 
+  {
+    name: 'Saved Queries',
+    path: '/saved-queries',
     description: 'View and manage saved queries'
   },
-  { 
-    name: 'Settings', 
-    path: '/settings', 
+  {
+    name: 'Settings',
+    path: '/settings',
     description: 'Application settings and preferences'
   }
 ];
