@@ -103,71 +103,124 @@ export class DTCCFetcher {
   
   /**
    * Fetch intraday reports from DTCC
+   * Uses the batch-based approach where each slice is a sequential batch.
+   * Each batch contains new trades since the previous batch.
    */
-  public async fetchIntradayReports(params: DTCCIntraDayParams): Promise<DTCCTrade[]> {
-    const { 
-      agency, 
-      assetClass, 
-      startTimestamp, 
-      endTimestamp 
+  public async fetchIntradayReports(params: DTCCIntraDayParams): Promise<{
+    trades: DTCCTrade[];
+    highestSliceId: number;
+    processedSliceIds: number[];
+  }> {
+    const {
+      agency,
+      assetClass,
+      minSliceId = 1, // Start from the first slice by default
+      lastKnownSliceId
     } = params;
-    
-    // Fetch intraday slice IDs
-    const sliceIds = await this.getDTCCIntradaySliceIds(
-      agency, 
-      assetClass, 
-      startTimestamp, 
-      endTimestamp
-    );
-    
+
+    // Get all available intraday slice IDs
+    const sliceIds = await this.getDTCCIntradaySliceIds(agency, assetClass);
+
     if (!sliceIds || sliceIds.length === 0) {
-      return [];
+      return { trades: [], highestSliceId: 0, processedSliceIds: [] };
     }
-    
-    // Fetch data for each slice
-    const allResults: DTCCTrade[] = [];
-    
-    for (const sliceId of sliceIds) {
-      const result = await this.fetchDTCCData(agency, assetClass, sliceId, true);
-      if (result && result.length > 0) {
-        allResults.push(...result);
+
+    // Sort slice IDs numerically
+    const numericSliceIds = sliceIds
+      .map(id => parseInt(id, 10))
+      .filter(id => !isNaN(id))
+      .sort((a, b) => a - b);
+
+    if (numericSliceIds.length === 0) {
+      return { trades: [], highestSliceId: 0, processedSliceIds: [] };
+    }
+
+    // Find the lowest and highest slice IDs
+    const lowestSliceId = Math.min(...numericSliceIds);
+    const highestSliceId = Math.max(...numericSliceIds);
+
+    // Determine which slices to fetch based on the minSliceId or lastKnownSliceId
+    const startSliceId = lastKnownSliceId
+      ? Math.max(lastKnownSliceId + 1, lowestSliceId)
+      : Math.max(minSliceId, lowestSliceId);
+
+    // Create an array of slice IDs to fetch (only those that exist)
+    const sliceIdsToFetch = [];
+    for (let id = startSliceId; id <= highestSliceId; id++) {
+      if (numericSliceIds.includes(id)) {
+        sliceIdsToFetch.push(id);
       }
     }
-    
-    return allResults;
+
+    // Fetch data for each slice sequentially
+    const allResults: DTCCTrade[] = [];
+    const processedSliceIds: number[] = [];
+
+    for (const sliceId of sliceIdsToFetch) {
+      console.log(`Fetching intraday slice ${sliceId} for ${agency}-${assetClass}`);
+      const result = await this.fetchDTCCData(agency, assetClass, sliceId.toString(), true);
+      if (result && result.length > 0) {
+        allResults.push(...result);
+        processedSliceIds.push(sliceId);
+        console.log(`Found ${result.length} trades in slice ${sliceId}`);
+      } else {
+        console.log(`No trades found in slice ${sliceId}`);
+      }
+    }
+
+    return {
+      trades: allResults,
+      highestSliceId,
+      processedSliceIds
+    };
   }
   
   /**
    * Fetch all reports (historical + intraday if needed)
    */
-  public async fetchReports(params: DTCCFetchParams): Promise<DTCCTrade[]> {
+  public async fetchReports(params: DTCCFetchParams): Promise<{
+    trades: DTCCTrade[];
+    metadata: {
+      intradayHighestSliceId?: number;
+      intradayProcessedSliceIds?: number[];
+    };
+  }> {
     const { agency, assetClass, startDate, endDate } = params;
-    
+
     // Start with historical data
     const historicalData = await this.fetchHistoricalReports(params);
-    
+
     // Check if we need intraday data (if end date is today)
     const today = new Date();
     const needsIntraday = (
-      isSameDay(endDate, today) || 
-      isEqual(endDate, today) || 
+      isSameDay(endDate, today) ||
+      isEqual(endDate, today) ||
       isBefore(today, endDate)
     );
-    
+
     if (needsIntraday) {
       const intradayParams: DTCCIntraDayParams = {
         agency,
         assetClass,
-        startTimestamp: startDate,
-        endTimestamp: endDate
+        minSliceId: 1 // Start from the first batch
       };
-      
-      const intradayData = await this.fetchIntradayReports(intradayParams);
-      
-      return [...historicalData, ...intradayData];
+
+      const { trades: intradayTrades, highestSliceId, processedSliceIds } =
+        await this.fetchIntradayReports(intradayParams);
+
+      return {
+        trades: [...historicalData, ...intradayTrades],
+        metadata: {
+          intradayHighestSliceId: highestSliceId,
+          intradayProcessedSliceIds: processedSliceIds
+        }
+      };
     }
-    
-    return historicalData;
+
+    return {
+      trades: historicalData,
+      metadata: {}
+    };
   }
   
   /**
@@ -303,12 +356,11 @@ export class DTCCFetcher {
   
   /**
    * Get DTCC intraday slice IDs
+   * Returns a list of all available intraday batch IDs for a given agency and asset class
    */
   private async getDTCCIntradaySliceIds(
     agency: Agency,
-    assetClass: AssetClass,
-    startTimestamp?: Date,
-    endTimestamp?: Date
+    assetClass: AssetClass
   ): Promise<string[]> {
     // Asset class mapping for intraday IDs
     const assetClassIdMap: Record<AssetClass, string> = {
@@ -318,10 +370,10 @@ export class DTCCFetcher {
       'FOREX': 'FX',
       'COMMODITIES': 'CO'
     };
-    
+
     const assetClassId = assetClassIdMap[assetClass];
     const url = `${DTCC_BASE_URL}/api/slice/${agency}/${assetClassId}`;
-    
+
     try {
       const headers = {
         'authority': 'pddata.dtcc.com',
@@ -342,31 +394,23 @@ export class DTCCFetcher {
         'sec-fetch-site': 'same-origin',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
       };
-      
+
       const response = await this.axiosInstance.get(url, { headers });
-      
+
       if (response.status === 200 && response.data) {
         const sliceData = response.data;
-        
-        // Filter by timestamp if provided
-        let filteredSliceData = sliceData;
-        
-        if (startTimestamp) {
-          const startTime = startTimestamp.getTime();
-          filteredSliceData = filteredSliceData.filter(
-            (slice: any) => new Date(slice.dissemDTM).getTime() >= startTime
-          );
-        }
-        
-        if (endTimestamp) {
-          const endTime = endTimestamp.getTime();
-          filteredSliceData = filteredSliceData.filter(
-            (slice: any) => new Date(slice.dissemDTM).getTime() <= endTime
-          );
-        }
-        
+
+        // Get today's date in YYYY-MM-DD format to filter only today's slices
+        const today = format(new Date(), 'yyyy-MM-dd');
+
+        // Filter to only include today's slices
+        const todaysSlices = sliceData.filter((slice: any) => {
+          const sliceDate = slice.dissemDTM ? new Date(slice.dissemDTM) : null;
+          return sliceDate && format(sliceDate, 'yyyy-MM-dd') === today;
+        });
+
         // Extract slice IDs
-        return filteredSliceData.map((slice: any) => {
+        return todaysSlices.map((slice: any) => {
           const fileName = slice.fileName.toString();
           const parts = fileName.split(`_${assetClass}_`);
           if (parts.length > 1) {
@@ -378,7 +422,7 @@ export class DTCCFetcher {
     } catch (error) {
       console.error(`Error fetching intraday slice IDs: ${error}`);
     }
-    
+
     return [];
   }
   

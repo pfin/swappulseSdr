@@ -49,8 +49,13 @@ export interface DTCCFetchParams {
 }
 
 export interface DTCCIntraDayParams extends Omit<DTCCFetchParams, 'startDate' | 'endDate'> {
+  // Deprecated: intraday data uses batch IDs, not timestamps
   startTimestamp?: Date;
   endTimestamp?: Date;
+
+  // For batch-based processing
+  minSliceId?: number;           // The first slice/batch ID to fetch (default: 1)
+  lastKnownSliceId?: number;     // The last slice/batch ID that was previously fetched
 }
 
 export interface DTCCResponse {
@@ -63,6 +68,11 @@ export interface DTCCResponse {
     assetClass: AssetClass;
     fetchDuration: number;
     cacheHit?: boolean;
+    // For intraday batch-based data
+    highestSliceId?: number;      // The highest slice/batch ID available
+    processedSliceIds?: number[]; // The slice/batch IDs that were processed in this request
+    lastUpdated?: Date;           // When the data was last updated
+    batchCounts?: Record<string, number>; // Number of trades in each batch
   };
 }
 
