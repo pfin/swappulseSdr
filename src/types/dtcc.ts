@@ -49,8 +49,9 @@ export interface DTCCFetchParams {
 }
 
 export interface DTCCIntraDayParams extends Omit<DTCCFetchParams, 'startDate' | 'endDate'> {
-  startTimestamp?: Date;
-  endTimestamp?: Date;
+  startTimestamp?: Date;         // Optional: start timestamp for filtering (deprecated)
+  endTimestamp?: Date;           // Optional: end timestamp for filtering (deprecated)
+  maxSlices?: number;            // Maximum number of intraday slices to fetch (most recent first)
 }
 
 export interface DTCCResponse {
