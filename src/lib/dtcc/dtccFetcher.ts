@@ -6,11 +6,11 @@
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import {
-  Agency,
-  AssetClass,
-  DTCCTrade,
-  DTCCError,
+import { 
+  Agency, 
+  AssetClass, 
+  DTCCTrade, 
+  DTCCError, 
   DTCCFetchParams,
   DTCCIntraDayParams,
   DTCCHeaders
@@ -103,31 +103,40 @@ export class DTCCFetcher {
   
   /**
    * Fetch intraday reports from DTCC
+   * 
+   * Note: DTCC intraday data identifiers are sequential numbers starting from 1
+   * and incrementing throughout the day. They don't refer to timestamps but rather
+   * to batch sequence numbers.
    */
   public async fetchIntradayReports(params: DTCCIntraDayParams): Promise<DTCCTrade[]> {
     const { 
       agency, 
-      assetClass, 
-      startTimestamp, 
-      endTimestamp 
+      assetClass,
+      maxSlices = 10 // Default to fetching up to 10 most recent intraday slices
     } = params;
     
-    // Fetch intraday slice IDs
-    const sliceIds = await this.getDTCCIntradaySliceIds(
-      agency, 
-      assetClass, 
-      startTimestamp, 
-      endTimestamp
-    );
+    // Fetch intraday slice IDs without timestamp filtering
+    const sliceIds = await this.getDTCCIntradaySliceIds(agency, assetClass);
     
     if (!sliceIds || sliceIds.length === 0) {
       return [];
     }
     
+    // Sort slice IDs numerically in descending order (most recent first)
+    // Since intraday slice IDs are sequential numbers
+    const sortedSliceIds = sliceIds
+      .map(id => parseInt(id, 10))
+      .filter(id => !isNaN(id))
+      .sort((a, b) => b - a) // Descending order
+      .map(id => id.toString());
+    
+    // Limit to the specified number of most recent slices
+    const recentSliceIds = sortedSliceIds.slice(0, maxSlices);
+    
     // Fetch data for each slice
     const allResults: DTCCTrade[] = [];
     
-    for (const sliceId of sliceIds) {
+    for (const sliceId of recentSliceIds) {
       const result = await this.fetchDTCCData(agency, assetClass, sliceId, true);
       if (result && result.length > 0) {
         allResults.push(...result);
@@ -158,8 +167,7 @@ export class DTCCFetcher {
       const intradayParams: DTCCIntraDayParams = {
         agency,
         assetClass,
-        startTimestamp: startDate,
-        endTimestamp: endDate
+        maxSlices: 20 // Fetch up to 20 most recent intraday slices for today
       };
       
       const intradayData = await this.fetchIntradayReports(intradayParams);
@@ -174,8 +182,8 @@ export class DTCCFetcher {
    * Fetch data from DTCC for a specific date or slice
    */
   private async fetchDTCCData(
-    agency: Agency,
-    assetClass: AssetClass,
+    agency: Agency, 
+    assetClass: AssetClass, 
     dateString: string,
     isIntraday: boolean = false
   ): Promise<DTCCTrade[] | null> {
@@ -243,7 +251,7 @@ export class DTCCFetcher {
    * This is a placeholder - in a real implementation, this would parse CSV or Excel data
    */
   private async processFileData(
-    fileData: Buffer,
+    fileData: Buffer, 
     fileName: string,
     agency: Agency,
     assetClass: AssetClass
@@ -257,8 +265,8 @@ export class DTCCFetcher {
    * Get DTCC URL for a specific date or slice
    */
   private getDTCCUrl(
-    agency: Agency,
-    assetClass: AssetClass,
+    agency: Agency, 
+    assetClass: AssetClass, 
     dateString: string,
     isIntraday: boolean = false
   ): string {
@@ -273,8 +281,8 @@ export class DTCCFetcher {
    * Get DTCC headers for a specific date or slice
    */
   private getDTCCHeaders(
-    agency: Agency,
-    assetClass: AssetClass,
+    agency: Agency, 
+    assetClass: AssetClass, 
     dateString: string,
     isIntraday: boolean = false
   ): DTCCHeaders {
@@ -303,12 +311,13 @@ export class DTCCFetcher {
   
   /**
    * Get DTCC intraday slice IDs
+   * 
+   * Intraday slices are identified by sequential numbers starting from 1
+   * and incrementing throughout the day.
    */
   private async getDTCCIntradaySliceIds(
     agency: Agency,
-    assetClass: AssetClass,
-    startTimestamp?: Date,
-    endTimestamp?: Date
+    assetClass: AssetClass
   ): Promise<string[]> {
     // Asset class mapping for intraday IDs
     const assetClassIdMap: Record<AssetClass, string> = {
@@ -348,28 +357,13 @@ export class DTCCFetcher {
       if (response.status === 200 && response.data) {
         const sliceData = response.data;
         
-        // Filter by timestamp if provided
-        let filteredSliceData = sliceData;
-        
-        if (startTimestamp) {
-          const startTime = startTimestamp.getTime();
-          filteredSliceData = filteredSliceData.filter(
-            (slice: any) => new Date(slice.dissemDTM).getTime() >= startTime
-          );
-        }
-        
-        if (endTimestamp) {
-          const endTime = endTimestamp.getTime();
-          filteredSliceData = filteredSliceData.filter(
-            (slice: any) => new Date(slice.dissemDTM).getTime() <= endTime
-          );
-        }
-        
-        // Extract slice IDs
-        return filteredSliceData.map((slice: any) => {
+        // Extract only the sequence numbers from slice IDs
+        // Format is typically: AGENCY_SLICE_ASSETCLASS_NUMBER.zip
+        return sliceData.map((slice: any) => {
           const fileName = slice.fileName.toString();
           const parts = fileName.split(`_${assetClass}_`);
           if (parts.length > 1) {
+            // The part after ASSETCLASS_ is just a sequence number
             return parts[1].split('.')[0];
           }
           return null;
