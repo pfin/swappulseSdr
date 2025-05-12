@@ -1,0 +1,65 @@
+/* Tailwind CSS directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 245, 247, 250;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+  min-height: 100vh;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c5c5c5;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
+
+/* Chart.js Custom Styles */
+.chart-container {
+  position: relative;
+  margin: auto;
+  height: 300px;
+}
+
+/* Table Styles */
+.table-container {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.table-container table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* Form Styles */
+.form-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
