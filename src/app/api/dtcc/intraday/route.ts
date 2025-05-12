@@ -19,9 +19,11 @@ const dtccService = new DTCCService();
  * Query parameters:
  * - agency: 'CFTC' | 'SEC'
  * - assetClass: 'RATES' | 'CREDITS' | 'EQUITIES' | 'FOREX' | 'COMMODITIES'
- * - startTimestamp: ISO date string (optional)
- * - endTimestamp: ISO date string (optional)
+ * - maxSlices: number (optional, default: 10) - Maximum number of most recent slices to fetch
  * - useCache: boolean (optional)
+ * 
+ * Note: startTimestamp and endTimestamp parameters are deprecated as intraday data
+ * is identified by sequential batch numbers, not timestamps.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -30,8 +32,7 @@ export async function GET(request: NextRequest) {
     // Get query parameters
     const agency = searchParams.get('agency') as Agency;
     const assetClass = searchParams.get('assetClass') as AssetClass;
-    const startTimestampStr = searchParams.get('startTimestamp');
-    const endTimestampStr = searchParams.get('endTimestamp');
+    const maxSlicesStr = searchParams.get('maxSlices');
     const useCache = searchParams.get('useCache') !== 'false';
     
     // Validate required parameters
@@ -42,16 +43,14 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Parse timestamp strings if provided
-    const startTimestamp = startTimestampStr ? parseISO(startTimestampStr) : undefined;
-    const endTimestamp = endTimestampStr ? parseISO(endTimestampStr) : undefined;
+    // Parse maxSlices if provided
+    const maxSlices = maxSlicesStr ? parseInt(maxSlicesStr, 10) : undefined;
     
     // Create fetch parameters
     const fetchParams: DTCCIntraDayParams = {
       agency,
       assetClass,
-      startTimestamp,
-      endTimestamp,
+      maxSlices,
       useCache
     };
     
