@@ -28,11 +28,15 @@ export default function TradeTable({ trades, loading = false }: TradeTableProps)
     if (!sortConfig.key) return trades;
     
     return [...trades].sort((a, b) => {
+      // Skip sorting if the key is empty
+      if (sortConfig.key === '') return 0;
+
+      // Safe access with non-empty key
       if (a[sortConfig.key] === null || a[sortConfig.key] === undefined) return 1;
       if (b[sortConfig.key] === null || b[sortConfig.key] === undefined) return -1;
-      
-      const aValue = a[sortConfig.key];
-      const bValue = b[sortConfig.key];
+
+      const aValue = a[sortConfig.key as keyof DTCCTrade];
+      const bValue = b[sortConfig.key as keyof DTCCTrade];
       
       if (aValue instanceof Date && bValue instanceof Date) {
         return sortConfig.direction === 'asc' 

@@ -297,7 +297,7 @@ export default function AssetClassTradesPage() {
       };
       
       setAnalytics(mockAnalytics);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching data:', err);
       setError((err as Error).message || 'An error occurred');
     } finally {

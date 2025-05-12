@@ -47,8 +47,7 @@ export class DTCCService {
     
     this.cache = new DTCCCache({
       maxSize: 100,
-      ttl: 24 * 60 * 60 * 1000, // 24 hours
-      persistToDisk: true
+      ttl: 24 * 60 * 60 * 1000 // 24 hours
     });
     
     this.cache.setEnabled(cacheEnabled);

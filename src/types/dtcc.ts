@@ -84,6 +84,7 @@ export interface DTCCHeaders {
   'sec-fetch-mode': string;
   'sec-fetch-site': string;
   'user-agent': string;
+  [key: string]: string; // Add index signature for compatibility with Axios headers
 }
 
 export interface DTCCAnalytics {

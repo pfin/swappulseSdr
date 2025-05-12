@@ -100,7 +100,11 @@ export default function TermStructureChart({
         label: isForward 
           ? `${curve.forwardTenor} Forward - ${curve.label}`
           : curve.label,
-        data: curve.points.map(point => ({ x: point.tenor, y: point.rate })),
+        data: sortedTenors.map(tenor => {
+          const point = curve.points.find(p => p.tenor === tenor);
+          // Return null for missing points to maintain continuous line but with gaps
+          return point ? point.rate : null;
+        }),
         borderColor: color,
         backgroundColor: `${color}33`, // Add transparency
         borderWidth: 2,
@@ -126,8 +130,8 @@ export default function TermStructureChart({
             callbacks: {
               label: (context) => {
                 const label = context.dataset.label || '';
-                const value = context.raw as { x: string, y: number };
-                return `${label}: ${value.y.toFixed(3)}%`;
+                const value = context.parsed.y;
+                return `${label}: ${value !== null ? value.toFixed(3) : 'N/A'}%`;
               }
             }
           },
@@ -155,7 +159,7 @@ export default function TermStructureChart({
               text: 'Rate (%)'
             },
             type: logScale ? 'logarithmic' : 'linear',
-            min: null
+            min: undefined
           }
         }
       }

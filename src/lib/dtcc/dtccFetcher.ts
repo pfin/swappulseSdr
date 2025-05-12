@@ -6,11 +6,11 @@
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { 
-  AgencyType, 
-  AssetClassType, 
-  DTCCTrade, 
-  DTCCError, 
+import {
+  Agency,
+  AssetClass,
+  DTCCTrade,
+  DTCCError,
   DTCCFetchParams,
   DTCCIntraDayParams,
   DTCCHeaders
@@ -174,8 +174,8 @@ export class DTCCFetcher {
    * Fetch data from DTCC for a specific date or slice
    */
   private async fetchDTCCData(
-    agency: AgencyType, 
-    assetClass: AssetClassType, 
+    agency: Agency,
+    assetClass: AssetClass,
     dateString: string,
     isIntraday: boolean = false
   ): Promise<DTCCTrade[] | null> {
@@ -243,10 +243,10 @@ export class DTCCFetcher {
    * This is a placeholder - in a real implementation, this would parse CSV or Excel data
    */
   private async processFileData(
-    fileData: Buffer, 
+    fileData: Buffer,
     fileName: string,
-    agency: AgencyType,
-    assetClass: AssetClassType
+    agency: Agency,
+    assetClass: AssetClass
   ): Promise<DTCCTrade[] | null> {
     // In a real implementation, this would parse the CSV or Excel data
     // For now, just return an empty array
@@ -257,8 +257,8 @@ export class DTCCFetcher {
    * Get DTCC URL for a specific date or slice
    */
   private getDTCCUrl(
-    agency: AgencyType, 
-    assetClass: AssetClassType, 
+    agency: Agency,
+    assetClass: AssetClass,
     dateString: string,
     isIntraday: boolean = false
   ): string {
@@ -273,8 +273,8 @@ export class DTCCFetcher {
    * Get DTCC headers for a specific date or slice
    */
   private getDTCCHeaders(
-    agency: AgencyType, 
-    assetClass: AssetClassType, 
+    agency: Agency,
+    assetClass: AssetClass,
     dateString: string,
     isIntraday: boolean = false
   ): DTCCHeaders {
@@ -305,13 +305,13 @@ export class DTCCFetcher {
    * Get DTCC intraday slice IDs
    */
   private async getDTCCIntradaySliceIds(
-    agency: AgencyType,
-    assetClass: AssetClassType,
+    agency: Agency,
+    assetClass: AssetClass,
     startTimestamp?: Date,
     endTimestamp?: Date
   ): Promise<string[]> {
     // Asset class mapping for intraday IDs
-    const assetClassIdMap: Record<AssetClassType, string> = {
+    const assetClassIdMap: Record<AssetClass, string> = {
       'RATES': 'IR',
       'CREDITS': 'CR',
       'EQUITIES': 'EQ',

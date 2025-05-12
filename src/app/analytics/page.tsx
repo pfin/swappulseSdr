@@ -134,7 +134,17 @@ export default function AnalyticsPage() {
         )}
         
         <div className="bg-white p-6 rounded-lg shadow-sm">
-          <AnalyticsDashboard analytics={analytics} loading={isLoading} />
+          {/* Pass default empty analytics object when null to satisfy type requirements */}
+          <AnalyticsDashboard
+            analytics={analytics || {
+              totalTrades: 0,
+              volumeByProduct: {},
+              tradeSizeDistribution: {},
+              timeDistribution: {},
+              largestTrades: []
+            }}
+            loading={isLoading}
+          />
         </div>
       </div>
     </Layout>
